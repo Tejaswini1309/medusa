@@ -1,0 +1,17 @@
+# Python 3.10 or 3.11 (64-bit). Install PyTorch FIRST with the CUDA 12.1 wheel:
+#   pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+# then:  pip install -r requirements.txt
+# Versions are pinned: kv_cache.py implements the transformers 4.46 Cache interface.
+torch==2.5.1
+transformers==4.46.3
+accelerate==1.1.1
+bitsandbytes==0.45.0
+peft==0.13.2
+safetensors>=0.4.3
+sentencepiece>=0.2.0
+protobuf>=4.25
+huggingface_hub>=0.26,<1.0
+numpy<2
+pyyaml>=6.0
+tqdm>=4.66
+pytest>=8.0

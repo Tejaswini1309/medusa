@@ -1,0 +1,71 @@
+# Base hyperparameters shared by every target model.
+# Values marked [paper] come from the Medusa paper (Cai et al., 2024, arXiv:2401.10774, App. B).
+# Values marked [ours] are choices made for the RTX 2070 Super (8 GB) setup; see README.md.
+
+seed: 42
+output_dir: outputs
+
+model:
+  name_or_path: lmsys/vicuna-7b-v1.5   # [paper] Sec 3.1 uses Vicuna v1.5
+  torch_dtype: float16                  # [ours] Turing (sm_75) has no native bf16
+  attn_implementation: sdpa             # [ours] FlashAttention-2 needs Ampere+; SDPA works on Turing
+  quantization:
+    load_in_4bit: true                  # [paper] App. B.3: 4-bit quantized backbone
+    bnb_4bit_quant_type: nf4
+    bnb_4bit_use_double_quant: true
+    bnb_4bit_compute_dtype: float16
+
+medusa:
+  num_heads: 5                          # [paper] App. B.2: 5 heads
+  num_layers: 1                         # [paper] App. B.2: 1 ResBlock per head
+
+data:
+  dataset_repo: Aeala/ShareGPT_Vicuna_unfiltered            # [paper] ShareGPT reference
+  dataset_file: ShareGPT_V4.3_unfiltered_cleaned_split.json # file used by the official Medusa repo
+  cache_dir: data                       # tokenized cache is stored here and reused
+  max_seq_len: 2048                     # [ours] fits 8 GB VRAM; paper does not state it for 7B
+  max_train_samples: null               # null = whole split; set e.g. 60000 (paper Sec 2.2.1 mentions 60k)
+  eval_samples: 200                     # held out, never trained on
+  num_workers: 0                        # Windows spawns processes; data is pre-tokenized so 0 is fine
+
+train:
+  stage: medusa1                        # medusa1 | medusa2_joint | medusa2_distill
+  epochs: 2                             # [paper] Sec 3.1
+  micro_batch_size: 1                   # [ours] sequences per forward pass on the GPU
+  global_batch_size: 64                 # [paper] App. B.3
+  heads_lr: 2.0e-3                      # [paper] App. B.3
+  backbone_lr: 5.0e-4                   # [paper] App. B.3 (Medusa-2 LoRA only)
+  warmup_steps: 40                      # [paper] App. B.3
+  lr_scheduler: cosine                  # [paper] App. B.2
+  weight_decay: 0.0
+  adam_betas: [0.9, 0.999]
+  max_grad_norm: 1.0                    # [ours] Axolotl default; paper does not state it
+  lambda_base: 0.8                      # [paper] lambda_k = 0.8^k
+  head_chunk_tokens: 512                # [ours] positions per head forward/backward chunk (bounds VRAM)
+  loss_scale_init: 65536.0              # [ours] dynamic loss scaling for fp16 head grads
+  loss_scale_growth_interval: 2000
+  log_every: 1                          # optimizer steps
+  eval_every: 200                       # optimizer steps
+  save_every: 100                       # optimizer steps
+  save_optimizer_state: true            # needed to resume; ~9 GB on disk
+  gradient_checkpointing: true          # Medusa-2 only (backbone gets gradients)
+
+medusa2:
+  lambda0: 0.2                          # [paper] App. B.3 (ground-truth / QLoRA)
+  lambda0_schedule: constant            # constant | sine  ([paper] App. B.4 uses sine for self-distillation)
+  lora:
+    r: 32                               # [paper] App. B.2
+    lora_alpha: 16
+    lora_dropout: 0.05
+    target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj, lm_head]
+
+generation:
+  tree_topk: [4, 2, 2, 1, 1]            # [ours] s_k per head: Cartesian tree with 1+60 nodes (paper's sparse tree has 64)
+  temperature: 0.0                      # 0 = greedy
+  top_k: 0
+  top_p: 1.0
+  epsilon: 0.09                         # hard threshold (official Medusa repo default)
+  delta: 0.3                            # entropy threshold; paper Sec 3.3.2 sets alpha = sqrt(epsilon)
+  root_greedy: true                     # [paper] Sec 2.3.1: greedy first token, accepted unconditionally
+  max_new_tokens: 512
+  max_context: 2048                     # KV cache capacity (prompt + generated + tree)

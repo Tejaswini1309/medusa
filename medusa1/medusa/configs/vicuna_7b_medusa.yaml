@@ -1,0 +1,16 @@
+# Target model + head architecture for Vicuna-7B.
+# Deep-merged on top of base_config.yaml (keys here win).
+base: base_config.yaml
+
+output_dir: outputs/vicuna_7b_medusa1
+
+model:
+  name_or_path: lmsys/vicuna-7b-v1.5
+
+medusa:
+  num_heads: 5
+  num_layers: 1
+
+train:
+  stage: medusa1
+  epochs: 1          # 30k-sample, 1-epoch run (paper: 2 epochs on full ShareGPT)
